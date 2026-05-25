@@ -1,8 +1,10 @@
 ---
-title: Resources
+title: Usage
 ---
 
-# Resources
+# Usage
+
+This guide covers the resource-level tax administration workflows exposed through the plugin.
 
 The plugin provides four Filament resources for managing tax configuration.
 
