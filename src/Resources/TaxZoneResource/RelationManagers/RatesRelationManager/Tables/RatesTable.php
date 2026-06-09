@@ -2,10 +2,9 @@
 
 declare(strict_types=1);
 
-namespace AIArmada\FilamentTax\Resources\TaxZoneResource\RelationManagers\Tables;
+namespace AIArmada\FilamentTax\Resources\TaxZoneResource\RelationManagers\RatesRelationManager\Tables;
 
 use AIArmada\CommerceSupport\Support\OwnerWriteGuard;
-use AIArmada\FilamentTax\Support\FilamentTaxAuthz;
 use AIArmada\Tax\Models\TaxRate;
 use Filament\Actions\BulkAction;
 use Filament\Actions\CreateAction;
@@ -56,28 +55,26 @@ final class RatesTable
                 DeleteAction::make(),
             ])
             ->toolbarActions([
-                FilamentTaxAuthz::requirePermission(
-                    BulkAction::make('delete')
-                        ->label('Delete Selected')
-                        ->icon(Heroicon::OutlinedTrash)
-                        ->color('danger')
-                        ->requiresConfirmation()
-                        ->authorizeIndividualRecords('delete')
-                        ->action(function (Collection $records): void {
-                            foreach ($records as $record) {
-                                $verified = OwnerWriteGuard::findOrFailForOwner(
-                                    TaxRate::class,
-                                    $record->getKey(),
-                                    includeGlobal: false,
-                                    message: 'Tax rate is not accessible in the current owner scope.',
-                                );
+                BulkAction::make('delete')
+                    ->authorize(fn (): bool => auth()->user()?->can('tax.rates.delete') ?? false)
+                    ->label('Delete Selected')
+                    ->icon(Heroicon::OutlinedTrash)
+                    ->color('danger')
+                    ->requiresConfirmation()
+                    ->authorizeIndividualRecords('delete')
+                    ->action(function (Collection $records): void {
+                        foreach ($records as $record) {
+                            $verified = OwnerWriteGuard::findOrFailForOwner(
+                                TaxRate::class,
+                                $record->getKey(),
+                                includeGlobal: false,
+                                message: 'Tax rate is not accessible in the current owner scope.',
+                            );
 
-                                $verified->delete();
-                            }
-                        })
-                        ->deselectRecordsAfterCompletion(),
-                    'tax.rates.delete',
-                ),
+                            $verified->delete();
+                        }
+                    })
+                    ->deselectRecordsAfterCompletion(),
             ]);
     }
 }
