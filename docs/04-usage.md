@@ -22,21 +22,21 @@ Manages geographic tax zones that determine which tax rates apply based on custo
 
 | Column | Description |
 |--------|-------------|
-| Zone | Zone display name, with `code` as description |
-| Type | Badge: country / state / postcode |
-| Countries | Comma-joined ISO country codes |
-| Rates | Count of tax rates in the zone |
-| Priority | Numeric, sortable |
-| Default | Boolean icon (fallback zone) |
-| Active | Boolean icon |
+| Name | Zone display name |
+| Code | Unique identifier code |
+| Countries | Number of countries in zone |
+| States | Number of states in zone |
+| Rates | Count of active tax rates |
+| Default | Whether this is the fallback zone |
+| Active | Zone status |
 
 **Filters:**
-- Type (country / state / postcode)
-- Active (ternary)
+- Active zones only
+- Default zone only
 
 **Actions:**
-- View zone details
 - Edit zone
+- View zone details
 
 **Bulk Actions:**
 - Delete selected zones
@@ -77,12 +77,11 @@ Zone bulk mutations are revalidated server-side with `OwnerWriteGuard` using own
 |-------|------|----------|-------------|
 | name | TextInput | Yes | Display name for the zone |
 | code | TextInput | Yes | Unique identifier (uppercase) |
-| type | Select | Yes | country / state / postcode |
 | description | Textarea | No | Optional description |
 | countries | TagsInput | No | ISO country codes |
 | states | TagsInput | No | State/province codes |
 | postcodes | TagsInput | No | Postcode patterns (`43*`, `40000-49999`) |
-| priority | TextInput | No | Resolution priority (default: 10) |
+| priority | TextInput | No | Resolution priority (default: 0) |
 | is_active | Toggle | No | Enable/disable zone |
 | is_default | Toggle | No | Use as fallback zone |
 
@@ -131,6 +130,7 @@ Manages product categorization for different tax treatments.
 
 **Filters:**
 - Active only
+- Default only
 
 ### Form Fields
 
@@ -194,18 +194,20 @@ Manages tax percentages applied to products and shipping.
 
 | Column | Description |
 |--------|-------------|
-| Zone | Associated tax zone |
 | Name | Rate display name |
+| Zone | Associated tax zone |
 | Tax Class | Product category |
 | Rate | Percentage display |
-| Priority | Compound calculation order |
-| Created | Creation timestamp (toggleable) |
+| Compound | Whether rate compounds on previous taxes |
+| Shipping | Whether rate applies to shipping |
+| Active | Rate status |
 
 **Filters:**
-- Zone (dropdown)
-- Tax class (dropdown: standard / reduced / zero / exempt)
-- Active (ternary)
-- Compound (ternary)
+- Active only
+- By zone (dropdown)
+- By tax class (dropdown)
+- Compound rates only
+- Shipping rates only
 
 **Bulk Actions:**
 - Activate selected rates
@@ -270,33 +272,31 @@ Manages customer tax exemptions with approval workflow.
 
 - **Icon:** `heroicon-o-shield-exclamation`
 - **Group:** Tax
-- **Sort:** 4
-- **Badge:** Count of pending exemptions
+- **Badge:** Count of exemptions expiring within 30 days
 
 ### List View
 
 | Column | Description |
 |--------|-------------|
 | Customer | Exemptable entity name/ID |
-| Certificate | Exemption certificate number |
 | Zone | Tax zone (or "All Zones") |
-| Status | Lifecycle state badge |
+| Status | Pending, Approved, Rejected |
+| Reason | Exemption justification |
 | Starts At | When exemption becomes active |
 | Expires At | When exemption ends |
+| Created | Creation timestamp |
 
 **Filters:**
-- By status
+- By status (Pending, Approved, Rejected)
 - By zone
-- Expiring in 30 days
-- Expired
+- Expiring soon (within 30 days)
+- Active only (approved + valid dates)
 
-**Record Actions:**
-- View
-- Edit
+**Actions:**
+- Approve (on pending)
+- Reject (on pending)
+- View certificate
 - Download certificate
-- Approve
-- Renew
-- Delete
 
 **Bulk Actions:**
 - Approve selected
@@ -312,7 +312,7 @@ Exemption bulk mutations are revalidated server-side with `OwnerWriteGuard` usin
 │ Exemption Request                            │
 ├─────────────────────────────────────────────┤
 │ Customer Type [Select model...          ▼]  │
-│ Customer ID   [Select entity...         ▼]  │
+│ Customer ID   [__________________________]  │
 ├─────────────────────────────────────────────┤
 │ Scope                                        │
 ├─────────────────────────────────────────────┤
@@ -329,13 +329,13 @@ Exemption bulk mutations are revalidated server-side with `OwnerWriteGuard` usin
 │ Reason*       [__________________________]  │
 │               [__________________________]  │
 │ Certificate # [__________________________]  │
-│ Document      [📎 Upload file]              │
+│ Certificate   [📎 Upload file]              │
 ├─────────────────────────────────────────────┤
 │ Status                                       │
 ├─────────────────────────────────────────────┤
-│ Status        [Pending Review           ▼]  │
-│ Rejection     [__________________________]  │
-│ Reason        (internal notes)               │
+│ Status        [Pending                  ▼]  │
+│ Notes         [__________________________]  │
+│               (internal notes)               │
 └─────────────────────────────────────────────┘
 ```
 
@@ -344,40 +344,34 @@ Exemption bulk mutations are revalidated server-side with `OwnerWriteGuard` usin
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | exemptable_type | Select | Yes | Model class (e.g., Customer) |
-| exemptable_id | Select | Yes | Entity ID (owner-scoped options) |
+| exemptable_id | Select | Yes | Entity ID |
 | tax_zone_id | Select | No | Limit to specific zone (null = all) |
 | starts_at | DatePicker | No | Start of validity period |
 | expires_at | DatePicker | No | End of validity period |
 | reason | Textarea | Yes | Justification for exemption |
 | certificate_number | TextInput | No | External certificate reference |
 | document_path | FileUpload | No | Supporting documentation |
-| status | Select | Yes | pending, under_review, approved, rejected, revoked, expired |
-| rejection_reason | Textarea | No | Internal admin notes |
+| status | Select | Yes | pending, approved, rejected |
+| rejection_reason | Textarea | No | Internal rejection notes |
 
 ### Approval Workflow
 
-`status` is a spatie/laravel-model-states value cast. The shipped states are:
+1. **Pending** — Newly created or re-submitted
+2. **Approved** — Admin approved, exemption active if dates valid
+3. **Rejected** — Admin rejected, exemption not applied
 
-1. **pending** — Newly created or re-submitted
-2. **under_review** — Picked up for manual review
-3. **approved** — Admin approved, exemption active if dates valid
-4. **rejected** — Admin rejected, exemption not applied
-5. **revoked** — Previously approved, later withdrawn
-6. **expired** — `expires_at` has passed
-
-The table offers **Approve** and **Renew** as record actions and **Approve** /
-**Reject** / **Delete** as bulk actions. There is no per-row *Reject* action —
-use the bulk action, or edit the record's `status` directly.
+Actions appear based on current status:
+- Pending: Approve, Reject
+- Approved: Reject (revoke)
+- Rejected: Approve (reinstate)
 
 ### Certificate Download
 
-`DownloadTaxExemptionCertificateAction` provides secure certificate download.
-It is a plain class with an `execute()` method (it does **not** use
-`lorisleiva/laravel-actions`, so there is no `::run()` entry point):
+The `DownloadTaxExemptionCertificateAction` provides secure certificate download:
 
 ```php
 // Path is validated to prevent directory traversal
-// Downloads file from the configured disk
+// Downloads file from storage
 app(DownloadTaxExemptionCertificateAction::class)->execute($exemption);
 ```
 

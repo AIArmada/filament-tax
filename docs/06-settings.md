@@ -25,87 +25,82 @@ Or via configuration:
 ## Navigation
 
 The settings page appears at:
-- **Path:** derived from the page class — `/admin/manage-tax-settings` in the default `admin` panel
-- **Navigation:** `Settings` > `Tax Settings` (group from `filament-tax.navigation.settings_group`, sort from `filament-tax.pages.navigation_sort.settings`)
+- **Path:** `/admin/manage-tax-settings` (default slug)
+- **Navigation:** Settings > Tax Settings
 - **Icon:** `heroicon-o-receipt-percent`
 
 ## Settings Overview
 
 The page manages the `TaxSettings` class from the base tax package using Spatie Laravel Settings.
-Defaults: 6% SST, prices exclusive of tax, tax on shipping **off**, SST Number label.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ Tax Settings                                                 │
 ├─────────────────────────────────────────────────────────────┤
 │                                                              │
+│ General Settings                                             │
+│ ─────────────────────────────────────────────────────────── │
+│                                                              │
 │ ☑ Enable Tax Calculation                                    │
-│   Enable or disable tax calculations globally.               │
+│   When enabled, taxes are calculated on orders               │
 │                                                              │
-│ Default Tax Rate (%)   [6___________]                        │
-│   Default tax rate percentage (e.g., 6 for 6%).              │
+│ Default Tax Rate (%)   [6.00___________]                    │
+│   Used when no zone-specific rate is found                   │
 │                                                              │
-│ Default Tax Name       [SST___________]                      │
-│   Tax name displayed on invoices (e.g., SST, GST, VAT).     │
+│ Default Tax Name       [SST_____________]                   │
+│   Tax name displayed on invoices                             │
+│                                                              │
+│ ─────────────────────────────────────────────────────────── │
+│ Price Configuration                                          │
+│ ─────────────────────────────────────────────────────────── │
 │                                                              │
 │ ☐ Prices Include Tax                                        │
-│   Enable if your prices already include tax.                 │
+│   Enable if product prices already include tax               │
 │                                                              │
 │ ☑ Tax Based on Shipping Address                             │
-│   Calculate tax based on shipping address (vs billing).      │
+│   Calculate tax based on shipping address                    │
 │                                                              │
 │ ☑ Digital Goods Taxable                                     │
-│   Apply tax to digital/downloadable products.                │
+│   Apply tax to digital products                              │
 │                                                              │
-│ ☐ Shipping Taxable                                          │
-│   Apply tax to shipping charges.                             │
+│ ─────────────────────────────────────────────────────────── │
+│ Shipping & Tax IDs                                           │
+│ ─────────────────────────────────────────────────────────── │
 │                                                              │
-│ Tax ID Label         [SST Number ▾]                          │
-│   Label for customer tax identification numbers.            │
+│ ☐ Shipping is Taxable                                       │
+│   Apply tax to shipping charges                              │
+│                                                              │
+│ Tax ID Label           [SST Number        ▼]                │
+│   Label for customer tax identification numbers              │
 │                                                              │
 │ ☐ Validate Tax IDs                                          │
-│   Validate customer tax IDs (requires integration).          │
+│   Validate customer tax IDs                                  │
 │                                                              │
 │ ☐ Require Exemption Certificate                             │
-│   Require certificate for B2B tax exemptions.                │
+│   Require certificate for B2B tax exemptions                 │
 │                                                              │
-│                                             [Save]            │
+│                                   [Cancel]  [Save Settings]  │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ## Available Settings
 
-`TaxSettings` is cast from spatie/laravel-settings. Property types are declared on the
-class; defaults come from the `tax` package's settings migration (see
-[Settings storage](#settings-storage)).
-
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
 | `enabled` | bool | `true` | Master switch for tax calculation |
-| `defaultTaxRate` | float | `6.0` | Default tax rate **percentage** (`6` = 6%), 0–100 |
-| `defaultTaxName` | string | `'SST'` | Tax name shown on invoices |
+| `defaultTaxRate` | float | `6.0` | Fallback rate as a percentage (e.g., 6 for 6%) |
+| `defaultTaxName` | string | `'SST'` | Tax name on invoices |
 | `pricesIncludeTax` | bool | `false` | Whether catalog prices include tax |
-| `taxBasedOnShippingAddress` | bool | `true` | Resolve tax from shipping instead of billing address |
-| `digitalGoodsTaxable` | bool | `true` | Apply tax to digital/downloadable products |
+| `taxBasedOnShippingAddress` | bool | `true` | Use shipping address for zone |
+| `digitalGoodsTaxable` | bool | `true` | Tax digital products |
 | `shippingTaxable` | bool | `false` | Apply tax to shipping |
-| `taxIdLabel` | string | `'SST Number'` | Label for customer tax IDs |
+| `taxIdLabel` | string | `'SST Number'` | Label for tax ID field |
 | `validateTaxIds` | bool | `false` | Validate customer tax IDs |
-| `requireExemptionCertificate` | bool | `false` | Require a certificate for B2B exemptions |
-
-Defaults come from `packages/tax/database/settings/2026_06_13_000003_create_tax_settings.php`.
-Three of them differ from the `??` fallbacks in `ManageTaxSettings::mount()` — `defaultTaxRate`
-(`6.0` vs `0.0`), `defaultTaxName` (`'SST'` vs `'Tax'`), and `taxIdLabel` (`'SST Number'` vs
-`'Tax ID'`). Read the value rather than assuming either one.
-
-> **warning**
-> `defaultTaxRate` is a percentage, not basis points. `TaxRate::$rate` is the basis-point
-> column (`600` = 6%); a 6% default here is `6`, not `600`. Do not mix the two in money math.
+| `requireExemptionCertificate` | bool | `false` | Require certificate for exemptions |
 
 ## Implementation
 
-`ManageTaxSettings` is a `final class ... extends Page` (not `SettingsPage`) that
-resolves `TaxSettings` from the container in `mount()` and writes it back in `save()`.
-Filament v5 schemas live in `Filament\Schemas\Schema`:
+The settings page extends Filament's settings page with custom form fields:
 
 ```php
 namespace AIArmada\FilamentTax\Pages;
@@ -114,122 +109,105 @@ use AIArmada\Tax\Settings\TaxSettings;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Pages\Page;
 use Filament\Schemas\Schema;
 
 final class ManageTaxSettings extends Page
 {
-    protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-receipt-percent';
-    
-    public static function getNavigationGroup(): string|UnitEnum|null
-    {
-        return config('filament-tax.navigation.settings_group');
-    }
-    
-    public static function getNavigationSort(): ?int
-    {
-        $sort = config('filament-tax.pages.navigation_sort.settings');
-        
-        return is_numeric($sort) ? (int) $sort : null;
-    }
-    
     public function form(Schema $schema): Schema
     {
         return $schema
             ->schema([
                 Toggle::make('enabled')
-                    ->label(__('Enable Tax Calculation'))
-                    ->helperText(__('Enable or disable tax calculations globally.')),
-                    
+                    ->label('Enable Tax Calculation'),
+
                 TextInput::make('defaultTaxRate')
-                    ->label(__('Default Tax Rate'))
+                    ->label('Default Tax Rate')
                     ->numeric()
-                    ->minValue(0)
-                    ->maxValue(100)
-                    ->suffix('%')
-                    ->required()
-                    ->helperText(__('Default tax rate percentage (e.g., 6 for 6%).')),
-                    
+                    ->suffix('%'),
+
                 TextInput::make('defaultTaxName')
-                    ->label(__('Default Tax Name'))
-                    ->required()
-                    ->helperText(__('Tax name displayed on invoices (e.g., SST, GST, VAT).')),
-                    
+                    ->label('Default Tax Name'),
+
                 Toggle::make('pricesIncludeTax')
-                    ->label(__('Prices Include Tax')),
-                    
+                    ->label('Prices Include Tax'),
+
                 Toggle::make('taxBasedOnShippingAddress')
-                    ->label(__('Tax Based on Shipping Address')),
-                    
+                    ->label('Tax Based on Shipping Address'),
+
                 Toggle::make('digitalGoodsTaxable')
-                    ->label(__('Digital Goods Taxable')),
-                    
+                    ->label('Digital Goods Taxable'),
+
                 Toggle::make('shippingTaxable')
-                    ->label(__('Shipping Taxable')),
-                    
+                    ->label('Shipping Taxable'),
+
                 Select::make('taxIdLabel')
-                    ->label(__('Tax ID Label'))
+                    ->label('Tax ID Label')
                     ->options([
                         'VAT Number' => 'VAT Number',
                         'GST Number' => 'GST Number',
                         'SST Number' => 'SST Number',
                         'Tax ID' => 'Tax ID',
-                    ])
-                    ->required(),
-                    
+                    ]),
+
                 Toggle::make('validateTaxIds')
-                    ->label(__('Validate Tax IDs')),
-                    
+                    ->label('Validate Tax IDs'),
+
                 Toggle::make('requireExemptionCertificate')
-                    ->label(__('Require Exemption Certificate')),
+                    ->label('Require Exemption Certificate'),
             ])
             ->statePath('data');
     }
 }
 ```
 
-> **warning**
-> Never set `protected static ?string $navigationGroup`. It blocks the `CommerceNavigation`
-> runtime override engine, which reads a resource's config default and then merges
-> `commerce-support.filament.navigation.items.{FQCN}` on top. Always implement
-> `getNavigationGroup()` and read `config()` inside it.
-
 ## Blade View
 
-The page uses the package view `filament-tax::pages.manage-tax-settings`. Publish it
-with:
+The page uses a custom Blade view at `resources/views/pages/manage-tax-settings.blade.php`:
 
-```bash
-php artisan vendor:publish --tag=filament-tax-views
+```blade
+<x-filament-panels::page>
+    <x-filament-panels::form wire:submit="save">
+        {{ $this->form }}
+        
+        <x-filament-panels::form.actions
+            :actions="$this->getCachedFormActions()"
+            :full-width="$this->hasFullWidthFormActions()"
+        />
+    </x-filament-panels::form>
+</x-filament-panels::page>
 ```
-
-which writes `resources/views/vendor/filament-tax/pages/manage-tax-settings.blade.php`.
 
 ## Authorization
 
-The page requires the `tax.settings.manage` ability, enforced two ways:
-`ManageTaxSettings::authzPermission()` returns `'tax.settings.manage'` (used by the
-`HasPageAuthz` concern), and `save()` re-checks `auth()->user()?->can('tax.settings.manage')`
-before writing, sending an "Unauthorized" notification otherwise.
+The settings page requires proper authorization:
 
-To use a different gate:
+### With filament-authz
+
+```php
+// Permissions checked:
+// - tax.settings.view (to see page)
+// - tax.settings.update (to save changes)
+```
+
+### Without filament-authz
+
+Create a gate or use policies:
 
 ```php
 // AuthServiceProvider
-Gate::define('tax.settings.manage', function ($user) {
+Gate::define('manage-tax-settings', function ($user) {
     return $user->hasRole('admin');
 });
 ```
 
-## Settings storage
+Then in the page:
 
-The `tax` package ships its spatie settings migrations in
-`packages/tax/database/settings` and appends that directory to
-`settings.migrations_paths` in `TaxServiceProvider::registerSettingsMigrationPath()`,
-so `php artisan migrate` picks them up with no copying step. If you want them in the
-application's own `database/settings`, publish them:
-
-```bash
-php artisan vendor:publish --tag=tax-settings
+```php
+public static function canAccess(): bool
+{
+    return Gate::allows('manage-tax-settings');
+}
 ```
 
 ## Extending Settings
@@ -237,9 +215,6 @@ php artisan vendor:publish --tag=tax-settings
 To add more settings fields:
 
 ### 1. Extend the Settings Class
-
-`TaxSettings` is not `final` and its group is already `tax`, so a subclass only needs
-the new properties:
 
 ```php
 namespace App\Settings;
@@ -249,18 +224,14 @@ use AIArmada\Tax\Settings\TaxSettings as BaseTaxSettings;
 class TaxSettings extends BaseTaxSettings
 {
     public bool $autoDetectZone = true;
+    public string $fallbackZoneId = '';
     
-    public ?string $fallbackZoneId = null;
+    public static function group(): string
+    {
+        return 'tax';
+    }
 }
 ```
-
-> **warning**
-> Register the subclass in the container so the page and your code resolve the same
-> class, otherwise spatie reads the base class and the extra properties stay unset:
->
-> ```php
-> $this->app->singleton(\App\Settings\TaxSettings::class);
-> ```
 
 ### 2. Create Migration
 
@@ -276,69 +247,44 @@ class AddAutoDetectToTaxSettings extends SettingsMigration
     public function up(): void
     {
         $this->migrator->add('tax.autoDetectZone', true);
-        $this->migrator->add('tax.fallbackZoneId', null);
+        $this->migrator->add('tax.fallbackZoneId', '');
     }
 }
 ```
 
-### 3. Create a Custom Settings Page
-
-`AIArmada\FilamentTax\Pages\ManageTaxSettings` is `final`, so write a standalone
-`Page` that reads and writes the same settings class:
+### 3. Create Custom Settings Page
 
 ```php
 namespace App\Filament\Pages;
 
-use AIArmada\Tax\Models\TaxZone;
+use AIArmada\FilamentTax\Pages\ManageTaxSettings as BaseSettingsPage;
 use App\Settings\TaxSettings;
-use BackedEnum;
+use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Toggle;
-use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
-use Filament\Pages\Page;
-use UnitEnum;
 
-class ManageTaxSettings extends Page
+class ManageTaxSettings extends BaseSettingsPage
 {
-    protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-cog-6-tooth';
-    
-    public static function getNavigationGroup(): string|UnitEnum|null
-    {
-        return config('filament-tax.navigation.settings_group');
-    }
-    
-    protected string $view = 'filament.pages.manage-tax-settings';
-    
-    public ?array $data = [];
-    
-    public function mount(): void
-    {
-        $settings = app(TaxSettings::class);
-        
-        $this->data = [
-            'autoDetectZone' => $settings->autoDetectZone,
-            'fallbackZoneId' => $settings->fallbackZoneId,
-        ];
-        
-        $this->getSchema('form')?->fill($this->data);
-    }
-    
     public function form(Schema $schema): Schema
     {
-        return $schema
-            ->schema([
-                Section::make('Zone Detection')
-                    ->schema([
-                        Toggle::make('autoDetectZone')
-                            ->label('Auto-detect Tax Zone'),
+        $schema = parent::form($schema);
+
+        return $schema->schema([
+            ...$schema->getComponents(),
+
+            Section::make('Zone Detection')
+                ->schema([
+                    Toggle::make('autoDetectZone')
+                        ->label('Auto-detect Tax Zone')
+                        ->helperText('Automatically detect zone from customer address'),
                         
-                        Select::make('fallbackZoneId')
-                            ->label('Fallback Zone')
-                            ->options(TaxZone::pluck('name', 'id')->all()),
-                    ]),
-            ])
-            ->statePath('data');
+                    Select::make('fallbackZoneId')
+                        ->label('Fallback Zone')
+                        ->options(TaxZone::pluck('name', 'id'))
+                        ->helperText('Zone to use when detection fails'),
+                ]),
+        ]);
     }
 }
 ```

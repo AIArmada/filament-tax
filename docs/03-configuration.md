@@ -205,41 +205,48 @@ class CustomerPanelProvider extends PanelProvider
 
 ## Resource Navigation
 
-Resource ordering within the Tax group is set in the `resources.navigation_sort`
-key shown in the [Configuration File](#configuration-file) dump above
-(`zones`, `classes`, `rates`, `exemptions`).
+Control resource ordering within the Tax group:
+
+```php
+'resources' => [
+    'navigation_sort' => [
+        'zones' => 1,
+        'classes' => 2,
+        'rates' => 2,
+        'exemptions' => 4,
+    ],
+],
+```
 
 ## Authorization Configuration
 
-`FilamentTaxServiceProvider` always registers four model policies
-(`TaxZonePolicy`, `TaxClassPolicy`, `TaxRatePolicy`, `TaxExemptionPolicy`).
-Each one checks a `tax.*` permission and then an owner-scope check:
+### With filament-authz
+
+The plugin automatically integrates with `filament-authz` when available. Permissions are auto-discovered from registered resources:
 
 ```php
-// Permissions checked by the shipped policies
-auth()->user()->can('tax.zones.view');    // and create / update / delete
-auth()->user()->can('tax.classes.view');
-auth()->user()->can('tax.rates.view');
-auth()->user()->can('tax.exemptions.view');
-
-// TaxSettings page
-auth()->user()->can('tax.settings.view');
+// filament-authz auto-generates permissions based on registered resources
+// e.g., tax-zone.view, tax-zone.create, tax-zone.update, tax-zone.delete
+auth()->user()->can('tax-zone.view');
 ```
 
-Seed those permissions in your app, or override the policies.
+### Without filament-authz
+
+Falls back to Laravel policies on the model:
+
+```php
+$user->can('viewAny', TaxZone::class);
+$user->can('create', TaxZone::class);
+$user->can('update', $zone);
+$user->can('delete', $zone);
+```
 
 ## Environment Variables
 
-This package defines one env-backed key of its own:
+The plugin doesn't define its own environment variables. Use the base tax package's env vars:
 
 ```env
-# Storage disk for uploaded exemption certificates (config/filament-tax.php)
-TAX_CERTIFICATES_DISK=local
-```
-
-Everything else comes from the base tax package:
-
-```env
+# Base tax package configuration
 TAX_ENABLED=true
 TAX_DEFAULT_CURRENCY=MYR
 TAX_PRICES_INCLUDE_TAX=false
